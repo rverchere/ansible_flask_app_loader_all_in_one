@@ -202,12 +202,14 @@
         src: flask_service.j2
         dest: /etc/systemd/system/{{ flask_app_name }}.service
         mode: '0755'
+      register: flask_systemd
 
     - name: start systemd app service
       systemd: 
         name: "{{ flask_app_name }}.service"
         state: restarted 
         enabled: yes
+      when: flask_systemd.changed
 
 - name: Deploy haproxy load balancer
   hosts: load_balancers
@@ -251,10 +253,21 @@
   hosts: app_servers:database_servers
   gather_facts: true
   become: true
+  vars:
+    postgres_library: python-psycopg2
   tags:
     - smoketest  
 
   tasks:
+
+    - name: Install Postgres packages
+      package:
+        name: "{{ __package }}"
+        state: present
+      loop:
+        - "{{ postgres_library }}"
+      loop_control:
+        loop_var: __package
 
     - name: Smoketest Postgres database
       postgresql_ping:
@@ -278,7 +291,7 @@
  
     - name: Check webserver for correct response
       uri:
-        url: "http://frontend/ping"
+        url: "http://frontend1/ping"
         return_content: yes
       until: '"alive" in result.content'
       retries: 10
